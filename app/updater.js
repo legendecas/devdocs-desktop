@@ -1,9 +1,9 @@
-const isDev = require('electron-is-dev')
+const { app } = require('electron')
 const log = require('electron-log')
 const { autoUpdater } = require('electron-updater')
 
 exports.init = () => {
-  if (isDev || process.platform === 'linux') {
+  if (!app.isPackaged || process.platform === 'linux') {
     return
   }
 

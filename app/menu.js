@@ -5,8 +5,6 @@ const {
   BrowserWindow,
   dialog
 } = require('electron')
-const axios = require('axios')
-const semverCompare = require('semver-compare')
 const { configDir, toggleGlobalShortcut } = require('./utils')
 const config = require('./config')
 const pkg = require('./package')
@@ -38,14 +36,14 @@ function createMenu(opts) {
       submenu: [
         {
           label: 'Custom CSS',
-          click() {
-            shell.openItem(configDir('custom.css'))
+          async click() {
+            shell.openPath(configDir('custom.css'))
           }
         },
         {
           label: 'Custom JS',
-          click() {
-            shell.openItem(configDir('custom.js'))
+          async click() {
+            shell.openPath(configDir('custom.js'))
           }
         },
         {
@@ -74,32 +72,39 @@ function createMenu(opts) {
     async click(item, focusedWindow) {
       if (!focusedWindow) return
 
-      const api =
-        'https://api.github.com/repos/egoist/devdocs-desktop/releases/latest'
-      const latest = await axios.get(api).then(res => res.data)
-
-      if (semverCompare(latest.tag_name.slice(1), pkg.version) === 1) {
-        dialog.showMessageBox(
-          focusedWindow,
-          {
-            type: 'info',
-            message: 'New updates!',
-            detail: `A new release (${latest.tag_name}) is available, view more details?`,
-            buttons: ['OK', 'Cancel'],
-            defaultId: 0
-          },
-          selected => {
-            if (selected === 0) {
-              shell.openExternal(
-                'https://github.com/egoist/devdocs-desktop/releases/latest'
-              )
-            }
-          }
+      try {
+        const res = await fetch(
+          'https://api.github.com/repos/egoist/devdocs-desktop/releases/latest',
+          { headers: { Accept: 'application/vnd.github.v3+json' } }
         )
-      } else {
+        const latest = await res.json()
+
+        if (compareSemver(latest.tag_name.slice(1), pkg.version) === 1) {
+          const { response } = await dialog.showMessageBox(
+            focusedWindow,
+            {
+              type: 'info',
+              message: 'New update available!',
+              detail: 'A new release (' + latest.tag_name + ') is available.',
+              buttons: ['View on GitHub', 'Cancel'],
+              defaultId: 0
+            }
+          )
+          if (response === 0) {
+            shell.openExternal(
+              'https://github.com/egoist/devdocs-desktop/releases/latest'
+            )
+          }
+        } else {
+          dialog.showMessageBox(focusedWindow, {
+            message: 'No updates',
+            detail: 'v' + pkg.version + ' is the latest version.'
+          })
+        }
+      } catch (_) {
         dialog.showMessageBox(focusedWindow, {
-          message: 'No updates!',
-          detail: `v${pkg.version} is already the latest version.`
+          message: 'Update check failed',
+          detail: 'Could not reach GitHub. Try again later.',
         })
       }
     }
@@ -304,6 +309,16 @@ function createMenu(opts) {
   })
 
   return Menu.buildFromTemplate(template)
+}
+
+function compareSemver(a, b) {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] > pb[i]) return 1
+    if (pa[i] < pb[i]) return -1
+  }
+  return 0
 }
 
 module.exports = createMenu

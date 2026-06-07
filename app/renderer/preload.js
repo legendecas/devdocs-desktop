@@ -1,49 +1,56 @@
-const { ipcRenderer: ipc } = require('electron')
-const config = require('../config')
+const { ipcRenderer } = require('electron')
 
-document.addEventListener('change', e => {
-  if (e.target.name === 'dark') {
-    switchMode(e.target.checked)
-  }
+let zoomFactor = 1
+
+// Listen for zoom commands from host
+ipcRenderer.on('set-zoom', (_event, factor) => {
+  zoomFactor = factor
+  applyZoom()
 })
 
-switchMode(/dark=1;/.test(document.cookie))
+ipcRenderer.on('zoom-in', () => {
+  zoomFactor = Math.min(zoomFactor + 0.1, 1.6)
+  applyZoom()
+  ipcRenderer.sendToHost('zoom-changed', zoomFactor)
+})
 
-function switchMode(isDark) {
-  const mode = isDark ? 'dark' : 'light'
-  ipc.sendToHost('switch-mode', mode)
+ipcRenderer.on('zoom-out', () => {
+  zoomFactor = Math.max(zoomFactor - 0.1, 0.8)
+  applyZoom()
+  ipcRenderer.sendToHost('zoom-changed', zoomFactor)
+})
+
+ipcRenderer.on('zoom-reset', () => {
+  zoomFactor = 1
+  applyZoom()
+  ipcRenderer.sendToHost('zoom-changed', zoomFactor)
+})
+
+function applyZoom() {
+  const node = document.querySelector('#zzz-devzoom')
+  if (node) {
+    node.textContent = 'body {zoom: ' + zoomFactor + ' !important}'
+  }
 }
 
-function setZoom(zoomFactor) {
-  const node = document.querySelector('#zoomFactor')
-  node.textContent = `body {zoom: ${zoomFactor} !important}`
-  config.set('zoomFactor', zoomFactor)
-}
+// Dark mode detection
+document.addEventListener('change', (e) => {
+  if (e.target.name === 'dark') {
+    ipcRenderer.sendToHost('switch-mode', e.target.checked ? 'dark' : 'light')
+  }
+})
 
 document.addEventListener('DOMContentLoaded', () => {
-  const zoomFactor = config.get('zoomFactor') || 1
+  // Create zoom style element
   const style = document.createElement('style')
-  style.id = 'zoomFactor'
+  style.id = 'zzz-devzoom'
+  style.textContent = 'body {zoom: ' + zoomFactor + ' !important}'
   document.body.append(style)
-  setZoom(zoomFactor)
-})
 
-ipc.on('zoom-in', () => {
-  const zoomFactor = config.get('zoomFactor') + 0.1
-
-  if (zoomFactor < 1.6) {
-    setZoom(zoomFactor)
+  // Detect initial dark mode
+  if (/dark=1;/.test(document.cookie)) {
+    ipcRenderer.sendToHost('switch-mode', 'dark')
+  } else {
+    ipcRenderer.sendToHost('switch-mode', 'light')
   }
-})
-
-ipc.on('zoom-out', () => {
-  const zoomFactor = config.get('zoomFactor') - 0.1
-
-  if (zoomFactor >= 0.8) {
-    setZoom(zoomFactor)
-  }
-})
-
-ipc.on('zoom-reset', () => {
-  setZoom(1)
 })
