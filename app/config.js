@@ -6,7 +6,7 @@ const configPath = path.join(app.getPath('userData'), 'config.json')
 
 const defaults = {
   lastWindowState: { width: 800, height: 600 },
-  shortcut: { toggleApp: null },
+  shortcut: { toggleApp: 'alt+space' },
   mode: 'dark'
 }
 

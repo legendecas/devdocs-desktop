@@ -33,7 +33,7 @@ Please consider [sponsoring me](http://github.com/sponsors/egoist) to accelerate
 
 ### Global shortcut
 
-Use <kbd>Ctrl+Shift+D</kbd> (or <kbd>Command+Shift+D</kbd> on macOS) to toggle the app.
+Use <kbd>Alt+Space</kbd> to toggle the app.
 
 ## Install
 
