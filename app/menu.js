@@ -11,12 +11,10 @@ const pkg = require('./package')
 
 function sendAction(action, ...args) {
   const [win] = BrowserWindow.getAllWindows()
-
-  if (process.platform === 'darwin') {
+  if (win) {
     win.restore()
+    win.webContents.send(action, ...args)
   }
-
-  win.webContents.send(action, ...args)
 }
 
 function updateMenu(opts) {
@@ -112,6 +110,62 @@ function createMenu(opts) {
 
   const template = [
     {
+      label: 'DevDocs',
+      submenu: [
+        {
+          role: 'about'
+        },
+        checkForUpdates,
+        {
+          type: 'separator'
+        },
+        ...preferences,
+        {
+          role: 'services',
+          submenu: []
+        },
+        {
+          type: 'separator'
+        },
+        {
+          role: 'hide'
+        },
+        {
+          role: 'hideothers'
+        },
+        {
+          role: 'unhide'
+        },
+        {
+          type: 'separator'
+        },
+        {
+          role: 'quit'
+        }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click() {
+            const win = BrowserWindow.getFocusedWindow()
+            if (win) win.emit('new-window-for-tab')
+          }
+        },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click() {
+            const win = BrowserWindow.getFocusedWindow()
+            if (win) win.close()
+          }
+        }
+      ]
+    },
+    {
       label: 'Edit',
       submenu: [
         {
@@ -140,6 +194,20 @@ function createMenu(opts) {
         },
         {
           role: 'selectall'
+        },
+        {
+          type: 'separator'
+        },
+        {
+          label: 'Speech',
+          submenu: [
+            {
+              role: 'startspeaking'
+            },
+            {
+              role: 'stopspeaking'
+            }
+          ]
         }
       ]
     },
@@ -189,8 +257,7 @@ function createMenu(opts) {
         },
         {
           label: 'Toggle Developer Tools',
-          accelerator:
-            process.platform === 'darwin' ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+          accelerator: 'Alt+Command+I',
           click(item, focusedWindow) {
             if (focusedWindow) focusedWindow.webContents.toggleDevTools()
           }
@@ -198,115 +265,22 @@ function createMenu(opts) {
       ]
     },
     {
-      role: 'window',
+      role: 'window'
+    },
+    {
+      role: 'help',
       submenu: [
         {
-          role: 'minimize'
-        },
-        {
-          role: 'close'
+          label: 'Report Issues',
+          click() {
+            shell.openExternal(
+              'http://github.com/egoist/devdocs-desktop/issues/new'
+            )
+          }
         }
       ]
     }
   ]
-
-  if (process.platform === 'darwin') {
-    template.unshift({
-      label: 'DevDocs',
-      submenu: [
-        {
-          role: 'about'
-        },
-        checkForUpdates,
-        {
-          type: 'separator'
-        },
-        ...preferences,
-        {
-          role: 'services',
-          submenu: []
-        },
-        {
-          type: 'separator'
-        },
-        {
-          role: 'hide'
-        },
-        {
-          role: 'hideothers'
-        },
-        {
-          role: 'unhide'
-        },
-        {
-          type: 'separator'
-        },
-        {
-          role: 'quit'
-        }
-      ]
-    })
-    // Edit menu.
-    template[1].submenu.push(
-      {
-        type: 'separator'
-      },
-      {
-        label: 'Speech',
-        submenu: [
-          {
-            role: 'startspeaking'
-          },
-          {
-            role: 'stopspeaking'
-          }
-        ]
-      }
-    )
-    // Window menu.
-    template[3].submenu = [
-      {
-        label: 'Close',
-        accelerator: 'CmdOrCtrl+W',
-        role: 'close'
-      },
-      {
-        label: 'Minimize',
-        accelerator: 'CmdOrCtrl+M',
-        role: 'minimize'
-      },
-      {
-        label: 'Zoom',
-        role: 'zoom'
-      },
-      {
-        type: 'separator'
-      },
-      {
-        label: 'Bring All to Front',
-        role: 'front'
-      }
-    ]
-  } else {
-    template.push({
-      label: 'Preferences',
-      submenu: [...preferences[0].submenu, preferences[1], checkForUpdates]
-    })
-  }
-
-  template.push({
-    role: 'help',
-    submenu: [
-      {
-        label: 'Report Issues',
-        click() {
-          shell.openExternal(
-            'http://github.com/egoist/devdocs-desktop/issues/new'
-          )
-        }
-      }
-    ]
-  })
 
   return Menu.buildFromTemplate(template)
 }

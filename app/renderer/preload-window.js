@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: function () { return ipcRenderer.invoke('window:maximize') },
 
   onIPC: function (channel, callback) {
-    var valid = ['open-search', 'focus-webview', 'link', 'zoom-in', 'zoom-out', 'zoom-reset']
+    var valid = ['open-search', 'focus-webview', 'navigate', 'zoom-in', 'zoom-out', 'zoom-reset']
     if (valid.indexOf(channel) !== -1) {
       var listener = function (_event) { callback.apply(null, Array.prototype.slice.call(arguments, 1)) }
       ipcRenderer.on(channel, listener)

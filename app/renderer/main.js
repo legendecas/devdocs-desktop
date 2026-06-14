@@ -13,13 +13,34 @@
     document.body.classList.add('is-dark-mode')
   }
 
-  // Header
-  createHeader()
-
   // WebView
-  var webview = await createWebView()
+  var webview
+  var pendingNavigate
 
-  // Debounced resize: reload webview so content re-lays out properly
+  function navigateTo(url) {
+    if (webview && webview.__ready) {
+      if (url.indexOf('devdocs://') === 0) {
+        var route = url.replace('devdocs://', '')
+        var match = route.match(/^search\/(.+)$/)
+        if (match) {
+          webview.src = 'https://devdocs.io/#q=' + encodeURIComponent(match[1])
+        }
+      } else {
+        webview.src = url
+      }
+    } else {
+      pendingNavigate = url
+    }
+  }
+
+  webview = await createWebView()
+
+  if (pendingNavigate) {
+    navigateTo(pendingNavigate)
+    pendingNavigate = null
+  }
+
+  // Debounced resize
   var resizeTimer
   window.addEventListener('resize', function () {
     clearTimeout(resizeTimer)
@@ -39,13 +60,14 @@
   api.onIPC('zoom-out', function () { webview.send('zoom-out') })
   api.onIPC('zoom-reset', function () { webview.send('zoom-reset') })
 
-  api.onIPC('link', function (url) {
-    var route = url.replace('devdocs://', '')
-    var match = route.match(/^search\/(.+)$/)
-    if (match) {
-      webview.src = 'https://devdocs.io/#q=' + encodeURIComponent(match[1])
-    }
+  api.onIPC('navigate', function (url) {
+    navigateTo(url)
   })
+
+  // Expose tab creation for new-window events from webview
+  window._createTab = function (url) {
+    api.sendIPC('create-tab', url)
+  }
 
   async function ensureCustomFiles() {
     var cssPath = api.configDir('custom.css')
@@ -57,15 +79,6 @@
     if (!(await api.fileExists(jsPath))) {
       await api.writeFile(jsPath, '')
     }
-  }
-
-  function createHeader() {
-    var header = document.createElement('header')
-    header.className = 'header'
-    header.innerHTML = '<h1 id="title" class="app-title">Loading DevDocs...</h1>'
-    header.addEventListener('dblclick', function () { api.maximize() })
-    header.addEventListener('click', function () { webview.focus() })
-    document.body.append(header)
   }
 
   function createWebView() {
@@ -110,17 +123,22 @@
         }
 
         wv.focus()
+        wv.__ready = true
         resolve(wv)
       })
 
       wv.addEventListener('did-stop-loading', function () {
-        var title = wv.getTitle()
-        document.querySelector('#title').textContent = title
+        document.title = wv.getTitle()
+      })
+
+      wv.addEventListener('page-title-updated', function (e) {
+        document.title = e.title
       })
 
       wv.addEventListener('new-window', function (e) {
         e.preventDefault()
-        api.openExternal(e.url)
+        // Create a new native tab on macOS
+        window._createTab(e.url)
       })
 
       wv.addEventListener('did-fail-load', function (e) {

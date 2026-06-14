@@ -13,19 +13,22 @@ let mainWindow
 let isQuitting = false
 let urlToOpen
 
-// Single instance lock
+// Track all windows (native tabs create multiple BrowserWindows)
+const allWindows = new Set()
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 }
 
 app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
   }
 })
 
-// --- IPC handlers for renderer ---
+// --- IPC handlers ---
 
 ipcMain.handle('config:get', (_event, key) => {
   return config.get(key)
@@ -67,18 +70,60 @@ ipcMain.handle('fs:exists', (_event, filePath) => {
   return fs.existsSync(filePath)
 })
 
+// Create a new tab window (triggered by renderer when a link wants a new window)
+ipcMain.on('create-tab', (_event, url) => {
+  const tab = createTabWindow(url)
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused) {
+    focused.addTabbedWindow(tab)
+    tab.show()
+  }
+})
 
-
-// --- Window ---
+// --- Window creation ---
 
 function toggleWindow() {
-  if (!mainWindow) return
-  if (mainWindow.isFocused()) {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  if (win.isFocused()) {
     Menu.sendActionToFirstResponder('hide:')
   } else {
-    mainWindow.show()
-    mainWindow.focus()
+    win.show()
+    win.focus()
   }
+}
+
+function createTabWindow(url) {
+  const lastWindowState = config.get('lastWindowState')
+  const offset = allWindows.size * 24
+
+  const win = new BrowserWindow({
+    title: app.name,
+    x: lastWindowState.x && lastWindowState.x + offset,
+    y: lastWindowState.y && lastWindowState.y + offset,
+    width: lastWindowState.width || 1000,
+    height: lastWindowState.height || 700,
+    minWidth: 600,
+    minHeight: 400,
+    show: false,
+    titleBarStyle: 'default',
+    tabbingIdentifier: 'devdocs-tabs',
+    webPreferences: {
+      preload: path.join(__dirname, 'renderer', 'preload-window.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webviewTag: true,
+    },
+  })
+
+  setupWindow(win, url)
+  allWindows.add(win)
+
+  win.on('closed', () => {
+    allWindows.delete(win)
+  })
+
+  return win
 }
 
 function createMainWindow() {
@@ -93,8 +138,8 @@ function createMainWindow() {
     minWidth: 600,
     minHeight: 400,
     show: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
-    trafficLightPosition: { x: 10, y: 10 },
+    titleBarStyle: 'default',
+    tabbingIdentifier: 'devdocs-tabs',
     webPreferences: {
       preload: path.join(__dirname, 'renderer', 'preload-window.js'),
       nodeIntegration: false,
@@ -103,11 +148,25 @@ function createMainWindow() {
     },
   })
 
-  if (process.platform === 'darwin') {
-    win.setSheetOffset(24)
-  }
+  setupWindow(win, null)
+  allWindows.add(win)
 
+  win.on('closed', () => {
+    allWindows.delete(win)
+  })
+
+  return win
+}
+
+function setupWindow(win, url) {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+
+  // macOS native tabs: create a new tabbed window when Cmd+T or + button is clicked
+  win.on('new-window-for-tab', () => {
+    const tab = createTabWindow()
+    win.addTabbedWindow(tab)
+    tab.show()
+  })
 
   // Context menu on the main window itself
   win.webContents.on('context-menu', (_event, params) => {
@@ -128,17 +187,20 @@ function createMainWindow() {
   })
 
   win.on('close', (e) => {
-    if (!isQuitting) {
+    if (!isQuitting && allWindows.size <= 1) {
+      // Last tab: hide the app instead of closing the window
       e.preventDefault()
-      if (process.platform === 'darwin') {
-        app.hide()
-      } else {
-        win.hide()
-      }
+      app.hide()
     }
+    // Otherwise let the window close normally — macOS removes the tab
   })
 
-  return win
+  // Send URL after the window is ready
+  if (url) {
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.send('navigate', url)
+    })
+  }
 }
 
 function buildContextMenu(params, webContents) {
@@ -233,21 +295,39 @@ app.on('ready', () => {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
+
+    // Enable the native tab bar by default: create a dummy tab, add it,
+    // then close it. The tab bar stays visible on the main window.
+    const dummy = new BrowserWindow({
+      show: false,
+      tabbingIdentifier: 'devdocs-tabs',
+    })
+    dummy.loadURL('about:blank')
+    mainWindow.addTabbedWindow(dummy)
+    dummy.close()
+
     updater.init()
     if (urlToOpen) {
-      mainWindow.webContents.send('link', urlToOpen)
+      mainWindow.webContents.send('navigate', urlToOpen)
     }
   })
 })
 
 app.on('activate', () => {
-  mainWindow.show()
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    win.show()
+  } else {
+    mainWindow = createMainWindow()
+    tray.create(mainWindow)
+  }
 })
 
 let hasOpenedOnce = false
 app.on('browser-window-focus', () => {
   if (hasOpenedOnce) {
-    mainWindow.webContents.send('focus-webview')
+    const win = BrowserWindow.getFocusedWindow()
+    if (win) win.webContents.send('focus-webview')
   } else {
     hasOpenedOnce = true
   }
@@ -255,8 +335,9 @@ app.on('browser-window-focus', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
-  if (!mainWindow.isFullScreen()) {
-    config.set('lastWindowState', mainWindow.getBounds())
+  const win = BrowserWindow.getFocusedWindow()
+  if (win && !win.isFullScreen()) {
+    config.set('lastWindowState', win.getBounds())
   }
 })
 
@@ -264,8 +345,9 @@ app.setAsDefaultProtocolClient('devdocs')
 
 app.on('will-finish-launching', () => {
   app.on('open-url', (_e, url) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('link', url)
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('navigate', url)
     } else {
       urlToOpen = url
     }

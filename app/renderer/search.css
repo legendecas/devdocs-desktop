@@ -3,17 +3,13 @@
   top: var(--webHeaderHeight);
   right: 0;
   padding: 10px;
-  background: var(--headerBackground);
+  background: var(--contentBackground);
   border: 1px solid var(--searchBorder);
   border-top: none;
   border-right: none;
   display: flex;
   border-radius: 0 0 0 3px;
   z-index: 9999;
-}
-
-.is-darwin .searcher {
-  top: calc(24px + var(--webHeaderHeight));
 }
 
 .searcher-progress {
@@ -27,7 +23,7 @@
 
 .searcher-action {
   border: 1px solid var(--searchActionBorder);
-  background: var(--contentBackgorund);
+  background: var(--contentBackground);
   outline: none;
   padding: 0 8px;
   cursor: pointer;
