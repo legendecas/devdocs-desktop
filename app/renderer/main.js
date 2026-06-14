@@ -19,6 +19,15 @@
   // WebView
   var webview = await createWebView()
 
+  // Debounced resize: reload webview so content re-lays out properly
+  var resizeTimer
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(function () {
+      webview.reload()
+    }, 1000)
+  })
+
   // Searcher for in-page find
   var searcher = new window.Searcher(webview)
   searcher.on('close', function () { webview.focus() })
