@@ -295,17 +295,6 @@ app.on('ready', () => {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
-
-    // Enable the native tab bar by default: create a dummy tab, add it,
-    // then close it. The tab bar stays visible on the main window.
-    const dummy = new BrowserWindow({
-      show: false,
-      tabbingIdentifier: 'devdocs-tabs',
-    })
-    dummy.loadURL('about:blank')
-    mainWindow.addTabbedWindow(dummy)
-    dummy.close()
-
     updater.init()
     if (urlToOpen) {
       mainWindow.webContents.send('navigate', urlToOpen)
