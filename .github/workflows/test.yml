@@ -1,4 +1,4 @@
-name: Build/release
+name: Build/test
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
       - master
 
 jobs:
-  release:
+  test:
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -27,8 +27,5 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build/release Electron app
-        uses: samuelmeuli/action-electron-builder@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          release: ${{ startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '/release') }}
+      - name: Test
+        run: npm test
